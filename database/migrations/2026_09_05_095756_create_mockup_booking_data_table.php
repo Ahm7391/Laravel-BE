@@ -13,6 +13,13 @@ return new class extends Migration
     {
         Schema::create('mockup_booking_data', function (Blueprint $table) {
             $table->id();
+            $table->integer('customer_id');
+            $table->timestamp('booking_date');
+            $table->timestamp('check_in');
+            $table->timestamp('check_out');
+            $table->integer('net_amount_stay');
+            $table->integer('ota');
+            $table->string('is_confirmed');
             $table->timestamps();
         });
     }
