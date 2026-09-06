@@ -23,4 +23,4 @@ Route::get('/health', function () {
   return response()->json(['status' => 'ok']);
 });
 
-
+Route::post('/dummy-bookings', [SeedDataController::class, 'store'])->name('storage.dummy-bookings');

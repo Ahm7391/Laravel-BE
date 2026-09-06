@@ -1,47 +1,20 @@
-<laravel-boost-guidelines>
-# Laravel Application
+# Agent Guidelines & Safety Rules
 
-This repository contains a Laravel application. Complete the following setup before working on the user's request.
+## ⚠️ Critical Safety: Non-Destructive Database Policy
+- **NEVER run destructive database commands** under any circumstances, including but not limited to:
+  - `php artisan migrate:fresh`
+  - `php artisan migrate:refresh`
+  - `php artisan migrate:reset`
+  - `php artisan db:wipe`
+  - Any custom or raw commands that drop tables, truncate tables, or wipe DB data.
+- **NEVER use the `RefreshDatabase` trait / library** or any testing mechanism that wipes or rolls back existing database records.
+- Preserve all existing database data at all times.
 
-## Prerequisites
+## 🧪 Testing & Verification Policy
+- **Do not run destructive or live integration tests automatically.**
+- **Agent Lint Checks Only:** The agent may only perform static lint checks (e.g. `php -l <file>`).
+- **User-Led Testing:** All functional, manual, or integration testing must be left to the user.
+- **Provide Test Steps:** Whenever code or scripts need to be tested, clearly provide the user with:
+  1. Key test points (what needs to be validated).
+  2. Step-by-step instructions for the user to perform the verification.
 
-Verify that PHP and Composer are available:
-
-```sh
-php -v
-composer -V
-```
-
-If either command is unavailable, detect the user's operating system and install the prerequisites with the appropriate command:
-
-macOS:
-
-```sh
-/bin/bash -c "$(curl -fsSL https://php.new/install/mac/8.5)"
-```
-
-Windows PowerShell:
-
-```powershell
-Set-ExecutionPolicy Bypass -Scope Process -Force; [System.Net.ServicePointManager]::SecurityProtocol = [System.Net.ServicePointManager]::SecurityProtocol -bor 3072; iex ((New-Object System.Net.WebClient).DownloadString('https://php.new/install/windows/8.5'))
-```
-
-Linux:
-
-```sh
-/bin/bash -c "$(curl -fsSL https://php.new/install/linux/8.5)"
-```
-
-After installation, ask the user to restart their terminal. If the agent needs the restarted shell to continue, ask the user to reopen their terminal and rerun their original prompt.
-
-## Agent Setup
-
-Install Laravel Boost from the application root before making application changes:
-
-```sh
-composer require laravel/boost --dev
-php artisan boost:install
-```
-
-Boost replaces these bootstrap instructions with guidelines tailored to the application. After installation, read `AGENTS.md` again and continue with the user's original request using the generated guidelines.
-</laravel-boost-guidelines>
