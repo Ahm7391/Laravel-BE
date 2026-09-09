@@ -2,7 +2,8 @@
 
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Route;
-use App\Http\Controllers\Api\Agent\SeedDataController;
+use App\Http\Controllers\AnalyticsDashboardController;
+use App\Http\Controllers\Api\SeedDataController;
 
 /*
 |--------------------------------------------------------------------------
@@ -24,3 +25,4 @@ Route::get('/health', function () {
 });
 
 Route::post('/dummy-bookings', [SeedDataController::class, 'store'])->name('storage.dummy-bookings');
+Route::post('/analytics-result/update', [AnalyticsDashboardController::class, 'updateStatusFromPipeline'])->name('api.analytics.update');
