@@ -2,7 +2,9 @@
 
 namespace App\Http\Controllers;
 
+use App\Models\AnalyticsChartResults;
 use App\Models\AnalyticsResult;
+use App\Models\MockupBookingData;
 use Carbon\Carbon;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\RedirectResponse;
@@ -43,7 +45,7 @@ class AnalyticsDashboardController extends Controller
         $dayStart = $validated['day_start'];
         $dayEnd = $validated['day_end'];
 
-        $pipelineBaseUrl = rtrim(env('PYTHON_PIPELINE_URL', 'http://127.0.0.1:8000'), '/');
+        $pipelineBaseUrl = rtrim(env('PYTHON_PIPELINE_URL', 'http://127.0.0.1:8005'), '/');
         $pipelineEndpoint = $pipelineBaseUrl . '/receive-data';
 
         $payload = [
@@ -148,4 +150,276 @@ class AnalyticsDashboardController extends Controller
             ],
         ]);
     }
+
+    /**
+     * Send mockup booking information to the Python pipeline.
+     *
+     * @param  \Illuminate\Http\Request  $request
+     * @return \Illuminate\Http\JsonResponse
+     */
+    public function sendBack(Request $request): JsonResponse
+    {
+        $customerId = $request->input('customer_id');
+        $startDate = $request->input('start_date', $request->input('day_start'));
+        $finishDate = $request->input('finish_date', $request->input('day_end'));
+
+        $query = MockupBookingData::query();
+
+        if ($customerId !== null && $customerId !== '') {
+            $query->where('customer_id', $customerId);
+        }
+
+        if ($startDate && $finishDate) {
+            $start = Carbon::parse($startDate)->startOfDay();
+            $finish = Carbon::parse($finishDate)->endOfDay();
+            $query->whereBetween('booking_date', [$start, $finish]);
+        } elseif ($startDate) {
+            $start = Carbon::parse($startDate)->startOfDay();
+            $query->where('booking_date', '>=', $start);
+        } elseif ($finishDate) {
+            $finish = Carbon::parse($finishDate)->endOfDay();
+            $query->where('booking_date', '<=', $finish);
+        }
+
+        $records = $query->orderBy('booking_date', 'asc')->get();
+
+        $data = $records->map(function ($booking) {
+            return [
+                'customer_id' => (int) $booking->customer_id,
+                'booking_date' => $booking->booking_date ? Carbon::parse($booking->booking_date)->format('Y-m-d H:i:s') : null,
+                'check_in' => $booking->check_in ? Carbon::parse($booking->check_in)->format('Y-m-d H:i:s') : null,
+                'check_out' => $booking->check_out ? Carbon::parse($booking->check_out)->format('Y-m-d H:i:s') : null,
+                'net_amount_stay' => (int) $booking->net_amount_stay,
+                'ota' => (int) $booking->ota,
+                'is_confirmed' => (string) $booking->is_confirmed,
+            ];
+        })->values()->all();
+
+        return response()->json([
+            'status' => 'success',
+            'data' => $data,
+            'booking_data' => $data,
+        ]);
+    }
+
+    /**
+     * Process incoming analytics result payload from Python pipeline.
+     *
+     * @param  \Illuminate\Http\Request  $request
+     * @return \Illuminate\Http\JsonResponse
+     */
+    public function recordsProcess(Request $request): JsonResponse
+    {
+        $keyId = $request->input('key_id');
+        $statusCode = $request->input('status_code');
+        $statusMessage = $request->input('status_message');
+        $customerId = $request->input('customer_id');
+        $dateStart = $request->input('date_start');
+        $dateEnd = $request->input('date_end');
+        $result = $request->input('result');
+
+        if (!$keyId) {
+            return response()->json([
+                'success' => false,
+                'message' => 'Missing key_id in request payload.',
+            ], 422);
+        }
+
+        // 1. Update analytics_result if matched with job_id_key
+        $analyticsRecord = AnalyticsResult::where('job_id_key', (string) $keyId)->latest()->first();
+        if ($analyticsRecord) {
+            $updateData = [];
+            if ($statusCode !== null) {
+                $updateData['status'] = (int) $statusCode;
+            }
+            if ($statusMessage !== null) {
+                $updateData['message'] = (string) $statusMessage;
+            }
+            if (!empty($updateData)) {
+                $analyticsRecord->update($updateData);
+            }
+        }
+
+        // 2. Process result array: if non-empty list, save to analytics_chart_results
+        $chartRecord = null;
+        if (is_array($result) && count($result) > 0) {
+            $parsedDateStart = null;
+            if (!empty($dateStart)) {
+                try {
+                    $parsedDateStart = is_numeric($dateStart)
+                        ? Carbon::createFromTimestamp($dateStart)
+                        : Carbon::parse($dateStart);
+                } catch (\Throwable $e) {
+                    $parsedDateStart = null;
+                }
+            }
+
+            $parsedDateEnd = null;
+            if (!empty($dateEnd)) {
+                try {
+                    $parsedDateEnd = is_numeric($dateEnd)
+                        ? Carbon::createFromTimestamp($dateEnd)
+                        : Carbon::parse($dateEnd);
+                } catch (\Throwable $e) {
+                    $parsedDateEnd = null;
+                }
+            }
+
+            $chartRecord = AnalyticsChartResults::create([
+                'job_id_key' => (string) $keyId,
+                'customer_id' => $customerId !== null ? (int) $customerId : ($analyticsRecord?->customer_id ?? 1),
+                'date_start' => $parsedDateStart,
+                'date_end' => $parsedDateEnd,
+                'result' => $result,
+            ]);
+        }
+
+        return response()->json([
+            'success' => true,
+            'message' => 'Payload processed successfully.',
+            'data' => [
+                'job_id_key' => $keyId,
+                'status_updated' => (bool) $analyticsRecord,
+                'chart_results_saved' => (bool) $chartRecord,
+            ],
+        ]);
+    }
+
+    /**
+     * Preview calculated analytics charts for a specific job ID.
+     *
+     * @param  string  $keyId
+     * @return \Illuminate\View\View|\Illuminate\Http\RedirectResponse
+     */
+    public function previewResults(string $keyId)
+    {
+        $chartRecord = AnalyticsChartResults::where('job_id_key', $keyId)->latest()->first();
+        $analyticsRecord = AnalyticsResult::where('job_id_key', $keyId)->latest()->first();
+
+        // If not found in DB, redirect back with warning
+        if (!$chartRecord) {
+            return redirect()->route('analytics.dashboard')
+                ->with('warning', "No chart calculation results found for Job ID: {$keyId}. Please ensure the job status is SUCCESS.");
+        }
+
+        $rawResults = is_array($chartRecord->result) ? $chartRecord->result : json_decode($chartRecord->result, true) ?? [];
+
+        // Parse result items into organized sections matching chartreport.vue requirements
+        $kpiSummary = [
+            'total_booking' => 0,
+            'total_net_per_stay' => 0,
+            'typical_lead_days' => 0,
+            'average_stay_days' => 0,
+        ];
+
+        $totalCheckinMonthly = null;
+        $totalCheckinDayOfWeek = null;
+        $priceRangePerMonth = [
+            'filter_selector' => [],
+            'chart_data' => [],
+        ];
+        $dailyArrPrice = null;
+        $arrTrend = null;
+        $arrSeasonalPattern = null;
+        $otaCompositionOverview = [
+            'filter_selector' => [],
+            'chart_data' => [],
+        ];
+        $otaPriceDistributionOverview = null;
+
+        $timeframeLabels = [
+            '15' => '1 - 5 Days',
+            '67' => '6 - 7 Days',
+            '814' => '8 - 14 Days',
+            '1521' => '15 - 21 Days',
+            '2235' => '22 - 35 Days',
+            '90plus' => '90+ Days',
+        ];
+
+        foreach ($rawResults as $item) {
+            $slug = $item['chart_slug_name'] ?? '';
+            $type = $item['type'] ?? '';
+            $dataset = $item['dataset'] ?? [];
+            $notes = $item['notes'] ?? ['judul' => '', 'desc' => ''];
+
+            if ($slug === 'kpi_summary') {
+                $kpiSummary = array_merge($kpiSummary, (array) $dataset);
+            } elseif ($slug === 'total_check_in_monthly') {
+                $totalCheckinMonthly = [
+                    'notes' => $notes,
+                    'series' => $dataset,
+                ];
+            } elseif ($slug === 'total_check_in_dayofweek') {
+                $totalCheckinDayOfWeek = [
+                    'notes' => $notes,
+                    'series' => $dataset,
+                ];
+            } elseif (str_starts_with($slug, 'price_range_per_month_')) {
+                $monthName = str_replace('price_range_per_month_', '', $slug);
+                $priceRangePerMonth['filter_selector'][] = [
+                    'key' => $monthName,
+                    'label' => $monthName,
+                ];
+                $priceRangePerMonth['chart_data'][$monthName] = [
+                    'notes' => $notes,
+                    'series' => $dataset,
+                ];
+            } elseif ($slug === 'daily_arr_price') {
+                $dailyArrPrice = [
+                    'notes' => $notes,
+                    'series' => $dataset,
+                ];
+            } elseif ($slug === 'arr_trend') {
+                $arrTrend = [
+                    'notes' => $notes,
+                    'series' => $dataset,
+                ];
+            } elseif ($slug === 'arr_seasonal_pattern') {
+                $arrSeasonalPattern = [
+                    'notes' => $notes,
+                    'series' => $dataset,
+                ];
+            } elseif (str_starts_with($slug, 'ota_composition_overview_')) {
+                $timeframeKey = str_replace('ota_composition_overview_', '', $slug);
+                $label = $timeframeLabels[$timeframeKey] ?? ($timeframeKey . ' Days');
+                $otaCompositionOverview['filter_selector'][] = [
+                    'key' => $timeframeKey,
+                    'label' => $label,
+                ];
+                $otaCompositionOverview['chart_data'][$timeframeKey] = [
+                    'notes' => $notes,
+                    'series' => $dataset,
+                ];
+            } elseif ($slug === 'ota_price_distribution_overview') {
+                $otaPriceDistributionOverview = [
+                    'notes' => $notes,
+                    'series' => $dataset,
+                ];
+            }
+        }
+
+        $chartPayload = [
+            'key_id' => $chartRecord->job_id_key,
+            'customer_id' => $chartRecord->customer_id,
+            'date_start' => $chartRecord->date_start ? $chartRecord->date_start->format('Y-m-d H:i:s') : null,
+            'date_end' => $chartRecord->date_end ? $chartRecord->date_end->format('Y-m-d H:i:s') : null,
+            'kpi_summary' => $kpiSummary,
+            'total_check_in_monthly' => $totalCheckinMonthly,
+            'total_check_in_dayofweek' => $totalCheckinDayOfWeek,
+            'price_range_per_month' => $priceRangePerMonth,
+            'daily_arr_price' => $dailyArrPrice,
+            'arr_trend' => $arrTrend,
+            'arr_seasonal_pattern' => $arrSeasonalPattern,
+            'ota_composition_overview' => $otaCompositionOverview,
+            'ota_price_distribution_overview' => $otaPriceDistributionOverview,
+        ];
+
+        return view('analytics.results', [
+            'chartRecord' => $chartRecord,
+            'analyticsRecord' => $analyticsRecord,
+            'chartPayload' => $chartPayload,
+            'keyId' => $keyId,
+        ]);
+    }
 }
+

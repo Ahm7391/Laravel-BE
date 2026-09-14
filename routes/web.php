@@ -9,3 +9,5 @@ Route::get('/', function () {
 
 Route::get('/analytics-dashboard', [AnalyticsDashboardController::class, 'index'])->name('analytics.dashboard');
 Route::post('/analytics-dashboard/request', [AnalyticsDashboardController::class, 'requestAnalytics'])->name('analytics.request');
+Route::get('/analytics-dashboard/results/{keyId}', [AnalyticsDashboardController::class, 'previewResults'])->name('analytics.results');
+

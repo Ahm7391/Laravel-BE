@@ -24,5 +24,10 @@ Route::get('/health', function () {
   return response()->json(['status' => 'ok']);
 });
 
+# THIS IS ONLY FOR DATA SEEDING
 Route::post('/dummy-bookings', [SeedDataController::class, 'store'])->name('storage.dummy-bookings');
+
+
 Route::post('/analytics-result/update', [AnalyticsDashboardController::class, 'updateStatusFromPipeline'])->name('api.analytics.update');
+Route::post('/analytics-demo', [AnalyticsDashboardController::class, 'sendBack'])->name('api.analytics.demo');
+Route::post('/dummy-records', [AnalyticsDashboardController::class, 'recordsProcess'])->name('api.dummy.records');

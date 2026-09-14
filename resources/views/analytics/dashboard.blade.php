@@ -193,6 +193,37 @@
             border: 1px solid #fcced9;
         }
 
+        .badge-status-sm {
+            padding: 0.15rem 0.45rem !important;
+            font-size: 0.68rem !important;
+            line-height: 1.15 !important;
+            border-radius: 0.3rem !important;
+        }
+
+        .btn-see-results {
+            display: inline-flex;
+            align-items: center;
+            gap: 0.3rem;
+            background-color: #009ef7;
+            color: #ffffff;
+            font-size: 0.72rem;
+            font-weight: 600;
+            padding: 0.2rem 0.5rem;
+            border-radius: 0.35rem;
+            text-decoration: none;
+            transition: all 0.2s ease;
+            box-shadow: 0 1px 3px rgba(0, 158, 247, 0.2);
+            white-space: nowrap;
+            line-height: 1.2;
+        }
+
+        .btn-see-results:hover {
+            background-color: #0095e8;
+            color: #ffffff;
+            box-shadow: 0 2px 6px rgba(0, 158, 247, 0.35);
+            transform: translateY(-1px);
+        }
+
         /* Pulsing Dot for In Progress */
         .pulsing-dot {
             width: 7px;
@@ -464,10 +495,17 @@
                                                 <span>1 [IN PROGRESS]</span>
                                             </span>
                                         @elseif ($item->status === 2)
-                                            <span class="badge-status badge-status-2">
-                                                <i class="bi bi-check-circle"></i>
-                                                <span>2 [SUCCESS]</span>
-                                            </span>
+                                            <div class="d-flex flex-column align-items-start gap-1">
+                                                <span class="badge-status badge-status-2 badge-status-sm">
+                                                    <i class="bi bi-check-circle"></i>
+                                                    <span>2 [SUCCESS]</span>
+                                                </span>
+                                                <a href="{{ route('analytics.results', $item->job_id_key) }}" target="_blank" class="btn-see-results" title="Open analytics chart results in a new tab">
+                                                    <i class="bi bi-bar-chart-line-fill"></i>
+                                                    <span>See Results</span>
+                                                    <i class="bi bi-box-arrow-up-right ms-1" style="font-size: 0.65rem;"></i>
+                                                </a>
+                                            </div>
                                         @elseif ($item->status === 3)
                                             <span class="badge-status badge-status-3">
                                                 <i class="bi bi-x-circle"></i>
