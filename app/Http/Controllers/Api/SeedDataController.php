@@ -21,7 +21,7 @@ class SeedDataController extends Controller
     public function store(Request $request): JsonResponse
     {
         // Extract items: seeders_booking_data.py sends {"data": [...]}, but we also support raw array or single object
-        $payload = $request->input('data', $request->all());
+        $payload = $request->input('data', $request->json('data', $request->all()));
 
         if (empty($payload)) {
             return response()->json([
@@ -31,15 +31,22 @@ class SeedDataController extends Controller
         }
 
         // Normalize to a list of records
-        $records = is_array($payload) && isset($payload[0]) ? $payload : [$payload];
+        $records = is_array($payload) && isset($payload[0]) ? $payload : (isset($payload['customer_id']) ? [$payload] : []);
+
+        if (empty($records)) {
+            return response()->json([
+                'success' => false,
+                'message' => 'Invalid or empty booking data provided.',
+            ], 422);
+        }
 
         // Validation rules for each record
         $validator = Validator::make(['items' => $records], [
             'items' => 'required|array|min:1',
             'items.*.customer_id' => 'required|integer',
-            'items.*.booking_date' => 'required|date',
-            'items.*.check_in' => 'required|date',
-            'items.*.check_out' => 'required|date|after_or_equal:items.*.check_in',
+            'items.*.booking_date' => 'required',
+            'items.*.check_in' => 'required',
+            'items.*.check_out' => 'required',
             'items.*.net_amount_stay' => 'required|numeric',
             'items.*.ota' => 'required|integer',
             'items.*.is_confirmed' => 'required',
