@@ -26,3 +26,4 @@ Route::get('/health', function () {
 
 Route::post('/dummy-bookings', [SeedDataController::class, 'store'])->name('storage.dummy-bookings');
 Route::post('/analytics-result/update', [AnalyticsDashboardController::class, 'updateStatusFromPipeline'])->name('api.analytics.update');
+Route::post('/analytics-demo', [AnalyticsDashboardController::class, 'sendBack'])->name('api.analytics.demo');

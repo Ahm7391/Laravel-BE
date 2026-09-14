@@ -3,6 +3,7 @@
 namespace App\Http\Controllers;
 
 use App\Models\AnalyticsResult;
+use App\Models\MockupBookingData;
 use Carbon\Carbon;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\RedirectResponse;
@@ -146,6 +147,57 @@ class AnalyticsDashboardController extends Controller
                 'status_label' => $record->status_label,
                 'message' => $record->message,
             ],
+        ]);
+    }
+
+    /**
+     * Send mockup booking information to the Python pipeline.
+     *
+     * @param  \Illuminate\Http\Request  $request
+     * @return \Illuminate\Http\JsonResponse
+     */
+    public function sendBack(Request $request): JsonResponse
+    {
+        $customerId = $request->input('customer_id');
+        $startDate = $request->input('start_date', $request->input('day_start'));
+        $finishDate = $request->input('finish_date', $request->input('day_end'));
+
+        $query = MockupBookingData::query();
+
+        if ($customerId !== null && $customerId !== '') {
+            $query->where('customer_id', $customerId);
+        }
+
+        if ($startDate && $finishDate) {
+            $start = Carbon::parse($startDate)->startOfDay();
+            $finish = Carbon::parse($finishDate)->endOfDay();
+            $query->whereBetween('booking_date', [$start, $finish]);
+        } elseif ($startDate) {
+            $start = Carbon::parse($startDate)->startOfDay();
+            $query->where('booking_date', '>=', $start);
+        } elseif ($finishDate) {
+            $finish = Carbon::parse($finishDate)->endOfDay();
+            $query->where('booking_date', '<=', $finish);
+        }
+
+        $records = $query->orderBy('booking_date', 'asc')->get();
+
+        $data = $records->map(function ($booking) {
+            return [
+                'customer_id' => (int) $booking->customer_id,
+                'booking_date' => $booking->booking_date ? Carbon::parse($booking->booking_date)->format('Y-m-d H:i:s') : null,
+                'check_in' => $booking->check_in ? Carbon::parse($booking->check_in)->format('Y-m-d H:i:s') : null,
+                'check_out' => $booking->check_out ? Carbon::parse($booking->check_out)->format('Y-m-d H:i:s') : null,
+                'net_amount_stay' => (int) $booking->net_amount_stay,
+                'ota' => (int) $booking->ota,
+                'is_confirmed' => (string) $booking->is_confirmed,
+            ];
+        })->values()->all();
+
+        return response()->json([
+            'status' => 'success',
+            'data' => $data,
+            'booking_data' => $data,
         ]);
     }
 }
