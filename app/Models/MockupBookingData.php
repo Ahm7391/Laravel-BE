@@ -29,6 +29,7 @@ class MockupBookingData extends Model
         'net_amount_stay',
         'ota',
         'is_confirmed',
+        'room_type_id'
     ];
 
     /**

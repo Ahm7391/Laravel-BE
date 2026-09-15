@@ -50,6 +50,7 @@ class SeedDataController extends Controller
             'items.*.net_amount_stay' => 'required|numeric',
             'items.*.ota' => 'required|integer',
             'items.*.is_confirmed' => 'required',
+            'items.*.room_type_id' => 'required'
         ]);
 
         if ($validator->fails()) {
@@ -74,6 +75,7 @@ class SeedDataController extends Controller
                 'is_confirmed' => is_bool($item['is_confirmed'])
                     ? ($item['is_confirmed'] ? 'true' : 'false')
                     : (string) $item['is_confirmed'],
+                'room_type_id' => (int) $item['room_type_id'],
                 'created_at' => $now,
                 'updated_at' => $now,
             ];

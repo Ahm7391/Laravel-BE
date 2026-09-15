@@ -15,7 +15,7 @@ class AnalyticsChartResults extends Model
         'customer_id',                                                                                                                                                                    
         'date_start',                                                                                                                                                                     
         'date_end',                                                                                                                                                                       
-        'result',                                                                                                                                                                         
+        'result',                                                                                                                                                                       
     ];                                                                                                                                                                                    
                                                                                                                                                                                             
     protected function casts(): array                                                                                                                                                     
