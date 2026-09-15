@@ -4,6 +4,7 @@ use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Route;
 use App\Http\Controllers\AnalyticsDashboardController;
 use App\Http\Controllers\Api\SeedDataController;
+use App\Http\Controllers\Api\ForecastServiceController;
 
 /*
 |--------------------------------------------------------------------------
@@ -27,7 +28,11 @@ Route::get('/health', function () {
 # THIS IS ONLY FOR DATA SEEDING
 Route::post('/dummy-bookings', [SeedDataController::class, 'store'])->name('storage.dummy-bookings');
 
-
+# ROUTING FOR ANALYTICS DASHBOARD FEATURES DEMO
 Route::post('/analytics-result/update', [AnalyticsDashboardController::class, 'updateStatusFromPipeline'])->name('api.analytics.update');
 Route::post('/analytics-demo', [AnalyticsDashboardController::class, 'sendBack'])->name('api.analytics.demo');
 Route::post('/dummy-records', [AnalyticsDashboardController::class, 'recordsProcess'])->name('api.dummy.records');
+
+# ROUTING FOR FORECAST SERVICE FEATURE
+Route::post('/forecast-demo', [ForecastServiceController::class, 'sendBack'])->name('api.forecast.demo');
+Route::post('/prediction-result'. [ForecastServiceController::class, 'predictionResult'])->name('api.prediction-result')
