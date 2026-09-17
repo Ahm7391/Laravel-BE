@@ -35,4 +35,4 @@ Route::post('/dummy-records', [AnalyticsDashboardController::class, 'recordsProc
 
 # ROUTING FOR FORECAST SERVICE FEATURE
 Route::post('/forecast-demo', [ForecastServiceController::class, 'sendBack'])->name('api.forecast.demo');
-Route::post('/prediction-result'. [ForecastServiceController::class, 'predictionResult'])->name('api.prediction-result')
+Route::post('/prediction-result', [ForecastServiceController::class, 'predictionResult'])->name('api.prediction-result');
