@@ -3,10 +3,14 @@
 namespace App\Http\Controllers\Api;
 
 use App\Http\Controllers\Controller;
+use App\Models\ForecastResult;
 use App\Models\MockupBookingData;
 use Carbon\Carbon;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\Log;
+use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Validator;
 
 class ForecastServiceController extends Controller
 {
@@ -77,6 +81,98 @@ class ForecastServiceController extends Controller
         })->values()->all();
 
         return response()->json($data);
+    }
+
+    public function predictionResult(Request $request): JsonResponse 
+    {
+        $validator = Validator::make($request->all(), [
+            'status' => 'required|string',
+            'customer_id' => 'nullable',
+            'forecasts' => 'present|array',
+            'forecasts.*.property_id' => 'nullable|integer',
+            'forecasts.*.room_type_id' => 'nullable',
+            'forecasts.*.forecast_date' => 'required|date',
+            'forecasts.*.forecasted_price' => 'nullable|numeric',
+            'forecasts.*.corrected_price' => 'nullable|numeric',
+        ]);
+
+        if ($validator->fails()) {
+            Log::warning('[ForecastService] Invalid prediction payload received', [
+                'errors' => $validator->errors()->toArray(),
+            ]);
+            return response()->json([
+                'success' => false,
+                'message' => 'Validation error',
+                'errors' => $validator->errors(),
+            ], 422);
+        }
+
+        $validated = $validator->validated();
+        $status = $validated['status'];
+        $customerId = $validated['customer_id'] ?? null;
+        $forecasts = $validated['forecasts'];
+
+        if (str_starts_with(strtolower($status), 'error') || str_starts_with(strtolower($status), 'failed')) {
+            Log::error('[ForecastService] Python forecast pipeline reported an error', [
+                'customer_id' => $customerId,
+                'status' => $status,
+            ]);
+            return response()->json([
+                'success' => false,
+                'message' => 'Pipeline error received and logged',
+                'pipeline_status' => $status,
+            ], 200);
+        }
+
+        try {
+            DB::beginTransaction();
+            $recordsToInsert = [];
+            $now = Carbon::now();
+            foreach ($forecasts as $item) {
+                $recordsToInsert[] = [
+                    'customer_id' => (int) ($item['property_id'] ?? $customerId ?? 0),
+                    'room_type_id' => (int) ($item['room_type_id'] ?? 0),
+                    'forecast_date' => Carbon::parse($item['forecast_date'])->format('Y-m-d H:i:s'),
+                    'forecasted_price' => isset($item['forecasted_price']) ? (float) $item['forecasted_price'] : 0,
+                    'corrected_price' => isset($item['corrected_price']) ? (float) $item['corrected_price'] : 0,
+                    'status' => $status,
+                    'created_at' => $now,
+                    'updated_at' => $now,
+                ];
+            }
+
+            if (!empty($recordsToInsert)) {
+                foreach (array_chunk($recordsToInsert, 500) as $chunk) {
+                    ForecastResult::upsert(
+                        $chunk,
+                        ['customer_id', 'room_type_id', 'forecast_date'],
+                        ['forecasted_price', 'corrected_price', 'status', 'updated_at']
+                    );
+                }
+            }
+
+            DB::commit();
+
+            Log::info('[ForecastService] Forecast results stored successfully', [
+                'customer_id' => $customerId,
+                'count' => count($recordsToInsert),
+            ]);
+            return response()->json([
+                'success' => true,
+                'message' => 'Forecast data received and processed successfully',
+                'records_count' => count($recordsToInsert),
+            ], 200);
+        } catch (\Throwable $e) {
+            DB::rollBack();
+            Log::error('[ForecastService] Failed storing forecast records: ' . $e->getMessage(), [
+                'trace' => $e->getTraceAsString(),
+            ]);
+            return response()->json([
+                'success' => false,
+                'message' => 'Internal server error while saving forecast records',
+                'error' => $e->getMessage(),
+            ], 500);
+        }
     }
 
     /**
